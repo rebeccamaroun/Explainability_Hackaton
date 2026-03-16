@@ -104,9 +104,7 @@
 
 
 
-\- `encoding\_mappings.json` is currently empty — mappings need to be regenerated
-
-\- One employee has `Age = -51` (likely a date parsing error in DOB)
+\- Some encoded values contain trailing whitespace (e.g., "M ", "Production       ", "Data Analyst ") and may cause mismatches if not trimmed
 
 \- Dataset is synthetic — findings may not generalize to real organizations
 
