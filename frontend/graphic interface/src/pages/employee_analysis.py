@@ -1,0 +1,159 @@
+from __future__ import annotations
+
+import pandas as pd
+import streamlit as st
+
+from src.schema_utils import derive_tenure_years, normalize_text_value
+from src.ui_components import (
+    bullet_card,
+    contribution_chart,
+    empty_state,
+    info_card,
+    notice,
+    page_header,
+    render_risk_badge,
+    section_header,
+)
+
+
+def _employee_label(row: pd.Series, schema: dict[str, str | None]) -> str:
+    name_col = schema.get("employee_name")
+    id_col = schema.get("employee_id")
+    name = normalize_text_value(row.get(name_col)) if name_col else "Employee"
+    if id_col and pd.notna(row.get(id_col)):
+        return f"{name} | {row[id_col]}"
+    return name
+
+
+def _summary_fields(row: pd.Series, schema: dict[str, str | None], tenure_years: pd.Series) -> list[tuple[str, str]]:
+    salary_value = row.get(schema.get("salary")) if schema.get("salary") else pd.NA
+    if pd.notna(salary_value):
+        salary_text = f"${float(salary_value):,.0f}"
+    else:
+        salary_text = "Not available"
+
+    tenure_value = tenure_years.loc[row.name]
+    tenure_text = f"{tenure_value:.1f} years" if pd.notna(tenure_value) else "Not available"
+
+    return [
+        ("Identifier", normalize_text_value(row.get(schema.get("employee_id"))) if schema.get("employee_id") else "Not available"),
+        ("Department", normalize_text_value(row.get(schema.get("department"))) if schema.get("department") else "Not available"),
+        ("Position", normalize_text_value(row.get(schema.get("position"))) if schema.get("position") else "Not available"),
+        ("Performance", normalize_text_value(row.get(schema.get("performance_score"))) if schema.get("performance_score") else "Not available"),
+        ("Salary", salary_text),
+        ("Manager", normalize_text_value(row.get(schema.get("manager"))) if schema.get("manager") else "Not available"),
+        ("Employment status", normalize_text_value(row.get(schema.get("employment_status"))) if schema.get("employment_status") else "Not available"),
+        ("Tenure", tenure_text),
+    ]
+
+
+def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None], dataset, ai_context: dict) -> None:
+    page_header(
+        "Employee Analysis",
+        "A decision-support profile for one employee, combining structured context, estimated risk, transparent drivers, and recommended next steps.",
+        eyebrow="Individual Review",
+        badges=[
+            (
+                "Heuristic outputs only"
+                if ai_context["mode"] == "demo"
+                else "Hybrid AI outputs"
+                if ai_context["mode"] == "hybrid"
+                else "Integrated AI outputs",
+                "demo" if ai_context["mode"] == "demo" else "warn",
+            )
+        ],
+        aside_title="What this page answers",
+        aside_body="Who may need HR attention now, why the signal appears, and which action should come first.",
+    )
+
+    labels = [_employee_label(row, schema) for _, row in df.iterrows()]
+    selected_label = st.selectbox("Select an employee", labels)
+    selected_index = labels.index(selected_label)
+    row = df.iloc[selected_index]
+    tenure_years = derive_tenure_years(df, schema)
+
+    summary_tab, drivers_tab, actions_tab = st.tabs(["Profile", "Drivers", "Actions"])
+
+    with summary_tab:
+        section_header("Employee summary", "A compact business view of the employee context used for this review.")
+        summary_fields = _summary_fields(row, schema, tenure_years)
+        summary_cols = st.columns(4)
+        for index, (label, value) in enumerate(summary_fields):
+            summary_cols[index % 4].metric(label, value)
+
+        lead_col, summary_col = st.columns([0.88, 1.12])
+        with lead_col:
+            section_header("Risk posture", "This score remains an aid for discussion, not an automated judgment.")
+            render_risk_badge(row.get("risk_level", "Unknown"), row.get("risk_score"))
+            components = ai_context.get("components", {})
+            if components.get("risk_scores") == "real":
+                st.caption("Risk score loaded from the trained model export.")
+            if bool(row.get("summary_is_simulated", ai_context["mode"] == "demo")):
+                st.caption("Narrative summary and some HR guidance may still rely on heuristic logic.")
+            notice(
+                "Decision-support notice",
+                "This output should be reviewed alongside manager context, recent events, and HR judgment before any intervention.",
+                tone="warning",
+            )
+
+        with summary_col:
+            section_header("HR summary", "A readable synthesis designed for HR case review.")
+            st.write(row.get("hr_summary", "No HR summary is available for this employee."))
+
+    with drivers_tab:
+        driver_col, factor_col = st.columns([1.2, 0.9])
+        explanations = row.get("explanation_details", [])
+        if not isinstance(explanations, list):
+            explanations = []
+
+        with driver_col:
+            section_header("Why this risk level?", "Contribution-style view of the main signals used in the current estimate.")
+            if explanations:
+                if ai_context.get("components", {}).get("explanations") == "real":
+                    st.caption("Explanation factors loaded from exported SHAP results.")
+                st.plotly_chart(contribution_chart(explanations), use_container_width=True)
+            else:
+                empty_state("No explanation details available", "No structured explanation was found for this employee.")
+
+        with factor_col:
+            section_header("Main risk factors", "The strongest signals that currently influence the employee profile.")
+            if explanations:
+                bullet_card(
+                    "Detected signals",
+                    [f"{item['factor'].capitalize()} ({item['contribution']:+.0f})" for item in explanations[:5]],
+                )
+            else:
+                empty_state("No factors available", "The current profile does not include factor-level explanation details.")
+
+    with actions_tab:
+        actions = row.get("recommended_actions", [])
+        if isinstance(actions, str):
+            actions = [actions]
+        elif not isinstance(actions, list):
+            actions = []
+
+        factors = row.get("explanation_details", [])
+        if not isinstance(factors, list):
+            factors = []
+
+        left, right = st.columns([1.05, 0.95])
+        with left:
+            section_header("Recommended preventive actions", "Suggested next steps linked to the current detected factors.")
+            if actions:
+                for index, action in enumerate(actions[:4]):
+                    linked_factor = factors[index]["factor"] if index < len(factors) else "general review"
+                    info_card(action, f"Linked factor: {linked_factor}.")
+            else:
+                empty_state("No actions available", "No preventive action suggestion is available for this employee.")
+
+        with right:
+            section_header("How to use this output", "Keep the employee discussion grounded, proportional, and review-based.")
+            bullet_card(
+                "Good practice reminders",
+                [
+                    "Validate the signal with recent manager and HR context.",
+                    "Use the output to prioritize outreach, not to automate a decision.",
+                    "Check whether sensitive or incomplete data could distort the picture.",
+                    "Document follow-up actions and review outcomes over time.",
+                ],
+            )

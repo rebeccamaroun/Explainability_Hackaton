@@ -1,0 +1,15 @@
+__pycache__/
+.pytest_cache/
+.streamlit/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+.venv/
+venv/
+env/
+data/predictions.csv
+data/explanations.csv
+data/recommendations.csv
+data/text_insights.csv
+data/metadata.json
