@@ -32,11 +32,11 @@ Replacing an employee costs 50–200% of their annual salary. Our solution helps
 
 ## Team workstreams
 
-| Workstream | Folder | Owner |
-|------------|--------|-------|
-| Data cleaning & augmentation | `data/` | _TBD_ |
-| Model (training, XAI, frugality) | `model/` | _TBD_ |
-| Frontend / demo UI | `frontend/` | _TBD_ |
+| Workstream | Folder | 
+|------------|--------|
+| Data cleaning & augmentation | `data/` | 
+| Model (training, XAI, frugality) | `model/` | 
+| Frontend / demo UI | `frontend/` | 
 
 ## Repo structure
 ```
