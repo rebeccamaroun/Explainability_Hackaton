@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import streamlit as st
 
+from src.llm_service import OllamaService
+from src.model_artifacts import build_model_metadata
 from src.config import SENSITIVE_COLUMNS
 from src.ui_components import bullet_card, info_card, notice, page_header, section_header
 
 
 def render_responsible_ai_page(df, schema: dict[str, str | None], dataset, ai_context: dict) -> None:
+    model_metadata = build_model_metadata()
+    llm_ok, llm_message = OllamaService().health_check()
     page_header(
         "Responsible AI and Transparency",
-        "A readable view of the product boundaries, demo limitations, explainability approach, and safeguards expected around sensitive HR data.",
+        "A readable view of the real predictive model integration, explainability source, local LLM role, and safeguards expected around sensitive HR data.",
         eyebrow="Trust and governance",
         badges=[("Responsible use", "demo"), ("Human review required", "warn")],
         aside_title="What this page answers",
@@ -27,21 +31,21 @@ def render_responsible_ai_page(df, schema: dict[str, str | None], dataset, ai_co
             "It does not automate promotions, compensation changes, sanctions, or termination decisions.",
         )
         info_card(
-            "Demo version limitations",
-            "Some AI components are simulated in this demo version. Final production outputs may differ once the ML and NLP pipelines are connected.",
+            "Model integration",
+            "The app uses exported outputs from the frugal Random Forest model and its SHAP explanations when those artifacts are available.",
         )
     with overview_right:
         info_card(
             "Explainability",
-            "The current experience favors interpretable rules and contribution-style factors so HR users can understand what is being shown.",
+            "Employee-level factor views are grounded in exported SHAP impacts from the trained frugal model.",
         )
         info_card(
             "Frugality",
-            "The product prioritizes lightweight processing and modular integration rather than opaque or computationally heavy workflows.",
+            f"The predictive core is a 10-feature frugal model ({model_metadata['model_name']}) documented in the project notebook.",
         )
         info_card(
-            "Decision-support only",
-            "No HR decision should be made automatically based only on this tool. Human review remains mandatory.",
+            "Local LLM role",
+            "Ollama is used only for wording, summaries, talking points, and recommendation phrasing. It does not generate the risk score.",
         )
 
     st.markdown("<div class='tg-hr'></div>", unsafe_allow_html=True)
@@ -75,7 +79,8 @@ def render_responsible_ai_page(df, schema: dict[str, str | None], dataset, ai_co
             "Core statements",
             [
                 "The results displayed are intended as decision-support only.",
-                "Some AI components are simulated in this demo version.",
+                "Predictive scores come from the real frugal model when exported artifacts are available.",
+                "Local LLM assistance is limited to narrative transformation and wording.",
                 "Sensitive variables should not be used directly to recommend individual actions without audit.",
                 "No HR decision should be made automatically based only on this tool.",
                 "The system prioritizes lightweight and interpretable approaches.",
@@ -99,10 +104,15 @@ def render_responsible_ai_page(df, schema: dict[str, str | None], dataset, ai_co
         else:
             notice(
                 "Fallback demo logic active",
-                "No external AI output files were detected. Risk, explanations, and recommendations currently rely on transparent fallback logic.",
+                "No exported model artifacts were detected. Risk, explanations, and recommendations currently rely on transparent fallback logic.",
                 tone="warning",
             )
         info_card(
             "Data protection reminder",
             "Only the minimum necessary data should be exposed in business workflows, and access should stay aligned with HR governance rules.",
+        )
+        notice(
+            "Local Ollama status",
+            llm_message if llm_ok else f"LLM-assisted sections will stay disabled. {llm_message}",
+            tone="info" if llm_ok else "warning",
         )
