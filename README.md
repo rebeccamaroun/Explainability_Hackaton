@@ -100,7 +100,7 @@ streamlit run app.py
 | 4 | Technical documentation | `docs/TECHNICAL_DOCUMENTATION.md` | Done |
 | 5 | Architecture diagram | `docs/ARCHITECTURE.md` | Done |
 | 6 | Executive summary | `docs/EXECUTIVE_SUMMARY.md` | Done |
-| 7 | Demo | `docs/DEMO_SCRIPT.md` | Done |
+| 7 | Demo | `docs/DEMO.md` | Done |
 | 8 | Slides / Pitch | `slides/` | Done |
 
 ## Key tools
