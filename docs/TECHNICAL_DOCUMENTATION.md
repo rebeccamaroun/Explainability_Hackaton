@@ -133,7 +133,7 @@ streamlit run app.py
 
 ## 8. How to reproduce
 ```bash
-git clone https://github.com/<username>/Explainability_Hackaton.git
+git clone https://github.com/rebeccamaroun/Explainability_Hackaton.git
 cd Explainability_Hackaton
 pip install -r requirements.txt
 ```
