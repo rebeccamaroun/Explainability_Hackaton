@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import json
+
 import pandas as pd
 import streamlit as st
 
-from src.config import RISK_LEVEL_ORDER
+from src.config import OLLAMA_MODEL, RISK_LEVEL_ORDER
+from src.llm_service import generate_employee_brief_with_cache
+from src.model_artifacts import build_model_metadata
 from src.schema_utils import normalize_text_value
 from src.ui_components import empty_state, notice, page_header, safe_download_dataframe, section_header
 
 
 def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dataset, ai_context: dict) -> None:
+    model_metadata = build_model_metadata()
     page_header(
         "Action Plan",
         "Prioritize HR follow-up by filtering the highest-risk cases, reviewing key factors, and exporting a practical action list for next steps.",
@@ -104,3 +109,56 @@ def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dat
     with lower[1]:
         safe_download_dataframe(display, "Export current action plan", "talentguard_action_plan.csv")
         st.caption("The export follows the active filters and sorting choices.")
+
+    if not display.empty:
+        st.markdown("<div class='tg-hr'></div>", unsafe_allow_html=True)
+        section_header("AI-assisted action rationale", "Generate an optional short rationale for one selected employee only.")
+        candidate_rows = display.head(max_rows).copy()
+        labels = [f"{row.Employee} | {row.Department} | {row['Risk level']}" for _, row in candidate_rows.iterrows()]
+        selected_label = st.selectbox("Select an employee for AI details", labels, key="action_plan_llm_employee")
+        selected_index = labels.index(selected_label)
+        selected_row = candidate_rows.iloc[selected_index]
+        llm_state_key = f"action_plan_llm::{selected_row['Employee']}"
+        payload = {
+            "employee_id": selected_row["Employee"],
+            "employee": selected_row["Employee"],
+            "department": selected_row["Department"],
+            "position": "Not available",
+            "risk_score": selected_row["Risk score"],
+            "risk_level": selected_row["Risk level"],
+            "top_factors": [{"factor": item.strip(), "contribution": 0} for item in str(selected_row["Key factors"]).split(",")[:3] if item.strip()],
+            "allowed_actions": [selected_row["Priority action"]],
+            "text_insight": "",
+        }
+        st.caption("This optional step does not affect the table load. It uses the local LLM only after user request.")
+        if st.button("Generate AI Action Rationale", key="action_plan_llm_generate"):
+            with st.spinner("Generating local AI rationale..."):
+                llm_result = generate_employee_brief_with_cache(
+                    str(selected_row["Employee"]),
+                    model_metadata.get("model_version", "unknown"),
+                    model_metadata.get("explanation_version", "unknown"),
+                    OLLAMA_MODEL,
+                    json.dumps(payload, sort_keys=True, default=str),
+                )
+                st.session_state[llm_state_key] = llm_result
+
+        llm_result = st.session_state.get(llm_state_key)
+        if llm_result and llm_result.get("available"):
+            notice(
+                "AI-assisted rationale",
+                llm_result.get("summary") or "No rationale returned.",
+                tone="info",
+            )
+            if llm_result.get("actions"):
+                for action in llm_result["actions"][:3]:
+                    notice("AI-assisted action phrasing", action, tone="info")
+            diagnostics = llm_result.get("diagnostics", {})
+            if diagnostics:
+                st.caption(
+                    f"LLM latency: {diagnostics.get('latency_seconds', 'n/a')}s | "
+                    f"load: {diagnostics.get('load_duration_ms', 'n/a')} ms | "
+                    f"eval: {diagnostics.get('eval_duration_ms', 'n/a')} ms | "
+                    f"cache hit: {diagnostics.get('cache_hit', False)}"
+                )
+        elif llm_result and not llm_result.get("available"):
+            notice("AI rationale unavailable right now", llm_result.get("error", "Local LLM service timeout."), tone="warning")

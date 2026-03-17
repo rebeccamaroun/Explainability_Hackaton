@@ -402,6 +402,12 @@ def render_app_header(ai_context: dict, dataset) -> None:
         if dataset.is_mock
         else "Structured HR records are loaded and ready for review."
     )
+    if ai_context["mode"] == "real":
+        integration_copy = "Real model artifacts are connected for predictions and explainability."
+    elif ai_context["mode"] == "hybrid":
+        integration_copy = "Real model artifacts are connected where available, with narrow fallbacks only for missing layers."
+    else:
+        integration_copy = "Trained-model artifacts were not detected, so the app is using transparent fallback logic."
     st.markdown(
         f"""
         <div class="tg-hero">
@@ -416,7 +422,7 @@ def render_app_header(ai_context: dict, dataset) -> None:
                 <div class="tg-mini-panel">
                     <div class="tg-mini-label">Current context</div>
                     <div class="tg-mini-value">{source_body}</div>
-                    <p class="tg-page-copy" style="margin-top:0.45rem;">Some outputs may remain simulated until the final AI pipeline is connected.</p>
+                    <p class="tg-page-copy" style="margin-top:0.45rem;">{integration_copy}</p>
                 </div>
             </div>
         </div>

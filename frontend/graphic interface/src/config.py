@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 APP_NAME = "TalentGuard"
@@ -60,11 +61,11 @@ AI_OUTPUT_FILES = {
     "metadata": DATA_DIR / "metadata.json",
 }
 
-for root in EXPLAINABILITY_ROOTS:
-    AI_OUTPUT_FILES.setdefault("project_risk_scores", root / "assets" / "employee_risk_scores.csv")
-    AI_OUTPUT_FILES.setdefault("project_shap_explanations", root / "assets" / "shap_explanations.json")
-    AI_OUTPUT_FILES.setdefault("project_shap_summary", root / "assets" / "shap_summary.png")
-    AI_OUTPUT_FILES.setdefault("project_shap_individual", root / "assets" / "shap_individual.png")
+PROJECT_ROOT = EXPLAINABILITY_ROOTS[0] if EXPLAINABILITY_ROOTS else BASE_DIR.parent
+AI_OUTPUT_FILES["project_risk_scores"] = PROJECT_ROOT / "assets" / "employee_risk_scores.csv"
+AI_OUTPUT_FILES["project_shap_explanations"] = PROJECT_ROOT / "assets" / "shap_explanations.json"
+AI_OUTPUT_FILES["project_shap_summary"] = PROJECT_ROOT / "assets" / "shap_summary.png"
+AI_OUTPUT_FILES["project_shap_individual"] = PROJECT_ROOT / "assets" / "shap_individual.png"
 
 
 RISK_LEVEL_ORDER = ["Low", "Medium", "High"]
@@ -78,3 +79,8 @@ SENSITIVE_COLUMNS = [
     "MaritalDesc",
     "GenderID",
 ]
+
+OLLAMA_ENABLED = os.getenv("OLLAMA_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "25"))

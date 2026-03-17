@@ -40,17 +40,20 @@ Replacing an employee costs 50–200% of their annual salary. Our solution helps
 
 ## Repo structure
 ```
+## Repo structure
+```
 Explainability_Hackaton/
 ├── data/
 │   ├── raw/                  # Original dataset (do not modify)
 │   ├── cleaned/              # Cleaned data + train/test splits
 │   └── augmented/            # Enriched dataset
-├── model/                    # Training, SHAP/LIME, CodeCarbon
-│   ├── train.py              # Train models, export risk scores
+├── model/
+│   ├── Modele Frugal.ipynb   # Main model — trains and compares all models
 │   ├── explain.py            # SHAP explanation plots
-│   └── frugal.py             # Frugal AI comparison
-├── frontend/                 # Demo UI
-├── assets/                   # SHAP plots, risk scores, JSON exports
+│   └── README.md             # Model documentation
+├── frontend/
+│   └── graphic interface/    # Streamlit demo UI (4 tabs)
+├── assets/                   # SHAP plots, risk scores
 ├── docs/                     # Data card, model card, architecture, summary
 ├── slides/                   # Pitch deck
 ├── requirements.txt
@@ -62,38 +65,48 @@ Explainability_Hackaton/
 git clone https://github.com/rebeccamaroun/Explainability_Hackaton.git
 cd Explainability_Hackaton
 pip install -r requirements.txt
-py model\train.py        # Train models + export risk scores
-py model\explain.py      # Generate SHAP plots
-py model\frugal.py       # Frugal AI comparison
+```
+
+### Model
+Open and run `model/Modele Frugal.ipynb` in Jupyter Notebook.
+
+### SHAP explanations
+```bash
+py model\explain.py
+```
+
+### Frontend
+```bash
+cd frontend/graphic\ interface
+streamlit run app.py
 ```
 
 ## Key results
 
-| Model | Features | AUC-ROC |
-|-------|----------|---------|
-| Random Forest (full) | 73 | 0.769 |
-| Random Forest (frugal) | 10 | 0.692 |
-| Logistic Regression | 73 | 0.684 |
+| Model | Features | AUC-ROC | F1 |
+|-------|----------|---------|-----|
+| RF (73 features) | 73 | 0.769 | 0.222 |
+| **RF Tuned Frugal (10 features)** | **10** | **0.830** | **0.653** |
 
-**86% fewer features, 96% faster training, only 10% performance drop.**
+**86% fewer features, 96% faster training and the frugal model actually performs better.**
 
 ## Deliverables
 
 | # | Deliverable | Location | Status |
 |---|-------------|----------|--------|
-| 1 | README | `README.md` | ✅ |
-| 2 | Data card | `docs/DATA_CARD.md` | ✅ |
-| 3 | Model card | `docs/MODEL_CARD.md` | ⬜ |
-| 4 | Technical documentation | `docs/TECHNICAL_DOCUMENTATION.md` | ⬜ |
-| 5 | Architecture diagram | `docs/ARCHITECTURE.md` | ⬜ |
-| 6 | Executive summary | `docs/EXECUTIVE_SUMMARY.md` | ⬜ |
-| 7 | Demo script | `docs/DEMO_SCRIPT.md` | ⬜ |
-| 8 | Slides / Pitch | `slides/` | ⬜ |
+| 1 | README | `README.md` | Done |
+| 2 | Data card | `docs/DATA_CARD.md` | Done |
+| 3 | Model card | `docs/MODEL_CARD.md` | Done |
+| 4 | Technical documentation | `docs/TECHNICAL_DOCUMENTATION.md` | Done |
+| 5 | Architecture diagram | `docs/ARCHITECTURE.md` | Done |
+| 6 | Executive summary | `docs/EXECUTIVE_SUMMARY.md` | Done |
+| 7 | Demo | `docs/DEMO_SCRIPT.md` | Done |
+| 8 | Slides / Pitch | `slides/` | Done |
 
 ## Key tools
 
 | Purpose | Tool |
 |---------|------|
-| Explainability | SHAP, LIME |
-| Carbon tracking | CodeCarbon, Ecologits |
-| Fairness (bonus) | AIF360 |
+| Explainability | SHAP |
+| Carbon tracking | CodeCarbon |
+| Frontend | Streamlit |

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import json
+
 import pandas as pd
 import streamlit as st
 
+from src.config import OLLAMA_MODEL
+from src.llm_service import generate_employee_brief_with_cache
+from src.model_artifacts import build_model_metadata
 from src.schema_utils import derive_tenure_years, normalize_text_value
 from src.ui_components import (
     bullet_card,
@@ -47,7 +52,32 @@ def _summary_fields(row: pd.Series, schema: dict[str, str | None], tenure_years:
     ]
 
 
+def _employee_payload(row: pd.Series, schema: dict[str, str | None], explanations: list[dict], actions: list[str]) -> dict:
+    def _value(field: str) -> str:
+        column = schema.get(field)
+        return normalize_text_value(row.get(column)) if column else "Not available"
+
+    payload = {
+        "employee": _value("employee_name"),
+        "employee_id": _value("employee_id"),
+        "department": _value("department"),
+        "position": _value("position"),
+        "risk_score": row.get("risk_score"),
+        "risk_level": row.get("risk_level"),
+        "top_factors": explanations[:5],
+        "deterministic_actions": actions[:4],
+        "manager": _value("manager"),
+        "employment_status": _value("employment_status"),
+    }
+    for optional_column in ["Exit_Interview_Feedback", "Internal_Transfer_Request"]:
+        if optional_column in row.index and pd.notna(row.get(optional_column)):
+            payload["text_insight"] = str(row.get(optional_column))
+    payload["allowed_actions"] = actions[:4]
+    return payload
+
+
 def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None], dataset, ai_context: dict) -> None:
+    model_metadata = build_model_metadata()
     page_header(
         "Employee Analysis",
         "A decision-support profile for one employee, combining structured context, estimated risk, transparent drivers, and recommended next steps.",
@@ -71,6 +101,18 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
     selected_index = labels.index(selected_label)
     row = df.iloc[selected_index]
     tenure_years = derive_tenure_years(df, schema)
+    initial_actions = row.get("recommended_actions", [])
+    if isinstance(initial_actions, str):
+        initial_actions = [initial_actions]
+    elif not isinstance(initial_actions, list):
+        initial_actions = []
+    initial_factors = row.get("explanation_details", [])
+    if not isinstance(initial_factors, list):
+        initial_factors = []
+    llm_payload = _employee_payload(row, schema, initial_factors, initial_actions)
+    employee_identifier = str(llm_payload.get("employee_id") or llm_payload.get("employee") or row.name)
+    llm_state_key = f"employee_llm_result::{employee_identifier}"
+    llm_button_key = f"employee_llm_generate::{employee_identifier}"
 
     summary_tab, drivers_tab, actions_tab = st.tabs(["Profile", "Drivers", "Actions"])
 
@@ -99,6 +141,32 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
         with summary_col:
             section_header("HR summary", "A readable synthesis designed for HR case review.")
             st.write(row.get("hr_summary", "No HR summary is available for this employee."))
+            st.caption("AI-assisted HR wording is optional and generated only on request.")
+            if st.button("Generate AI HR Summary", key=llm_button_key, use_container_width=False):
+                with st.spinner("Generating local AI summary..."):
+                    llm_result = generate_employee_brief_with_cache(
+                        employee_identifier,
+                        model_metadata.get("model_version", "unknown"),
+                        model_metadata.get("explanation_version", "unknown"),
+                        OLLAMA_MODEL,
+                        json.dumps(llm_payload, sort_keys=True, default=str),
+                    )
+                    st.session_state[llm_state_key] = llm_result
+
+            llm_result = st.session_state.get(llm_state_key)
+            if llm_result and llm_result.get("available"):
+                st.caption(f"AI-assisted wording generated locally via {llm_result.get('source')}.")
+                info_card("AI-assisted HR summary", llm_result.get("summary") or "No LLM summary returned.")
+                diagnostics = llm_result.get("diagnostics", {})
+                if diagnostics:
+                    st.caption(
+                        f"LLM latency: {diagnostics.get('latency_seconds', 'n/a')}s | "
+                        f"load: {diagnostics.get('load_duration_ms', 'n/a')} ms | "
+                        f"eval: {diagnostics.get('eval_duration_ms', 'n/a')} ms | "
+                        f"cache hit: {diagnostics.get('cache_hit', False)}"
+                    )
+            elif llm_result and not llm_result.get("available"):
+                notice("AI summary unavailable right now", llm_result.get("error", "Local Ollama service not reachable."), tone="info")
 
     with drivers_tab:
         driver_col, factor_col = st.columns([1.2, 0.9])
@@ -126,15 +194,8 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
                 empty_state("No factors available", "The current profile does not include factor-level explanation details.")
 
     with actions_tab:
-        actions = row.get("recommended_actions", [])
-        if isinstance(actions, str):
-            actions = [actions]
-        elif not isinstance(actions, list):
-            actions = []
-
-        factors = row.get("explanation_details", [])
-        if not isinstance(factors, list):
-            factors = []
+        actions = initial_actions
+        factors = initial_factors
 
         left, right = st.columns([1.05, 0.95])
         with left:
@@ -145,6 +206,11 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
                     info_card(action, f"Linked factor: {linked_factor}.")
             else:
                 empty_state("No actions available", "No preventive action suggestion is available for this employee.")
+            llm_result = st.session_state.get(llm_state_key)
+            if llm_result and llm_result.get("available") and llm_result.get("actions"):
+                st.caption("AI-assisted recommendations are phrased from model evidence and local context only.")
+                for action in llm_result.get("actions", [])[:3]:
+                    info_card(action, "Generated locally by Ollama from deterministic model evidence.")
 
         with right:
             section_header("How to use this output", "Keep the employee discussion grounded, proportional, and review-based.")
@@ -157,3 +223,6 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
                     "Document follow-up actions and review outcomes over time.",
                 ],
             )
+            llm_result = st.session_state.get(llm_state_key)
+            if llm_result and llm_result.get("available") and llm_result.get("manager_talking_points"):
+                bullet_card("AI-assisted talking points", llm_result["manager_talking_points"][:3])

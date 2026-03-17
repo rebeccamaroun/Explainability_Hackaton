@@ -16,7 +16,7 @@ from src.pages.responsible_ai import render_responsible_ai_page
 
 def main() -> None:
     st.set_page_config(
-        page_title=f"{APP_NAME} | HR Retention Demo",
+        page_title=f"{APP_NAME} | HR Retention Intelligence",
         layout="wide",
         initial_sidebar_state="expanded",
     )
