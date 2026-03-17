@@ -5,7 +5,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.schema_utils import coerce_numeric, derive_age_years, derive_tenure_years, get_column, has_field
-from src.ui_components import bullet_card, empty_state, info_card, metric_card, page_header, section_header, style_plotly_figure
+from src.ui_components import bullet_card, empty_state, footer_note, info_card, metric_card, page_header, section_header, style_plotly_figure
 
 
 def _risk_counts(df: pd.DataFrame) -> dict[str, int]:
@@ -29,28 +29,10 @@ def _resolved_age_series(df: pd.DataFrame, schema: dict[str, str | None]) -> pd.
     return derived_age.where((derived_age >= 14) & (derived_age <= 90))
 
 
-def _demo_badges(ai_context: dict) -> list[tuple[str, str]]:
-    return [
-        (
-            "Demo Version"
-            if ai_context["mode"] == "demo"
-            else "Hybrid AI state"
-            if ai_context["mode"] == "hybrid"
-            else "AI Outputs Connected",
-            "demo" if ai_context["mode"] == "demo" else "warn",
-        ),
-        ("Decision-support only", "warn"),
-    ]
-
-
 def render_dashboard_page(df: pd.DataFrame, schema: dict[str, str | None], dataset, ai_context: dict) -> None:
     page_header(
         "HR Dashboard",
-        "A high-level view of current workforce composition, estimated retention risk, and the main areas that deserve HR attention.",
-        eyebrow="Overview",
-        badges=_demo_badges(ai_context),
-        aside_title="What this page answers",
-        aside_body="How broad the risk appears, where it concentrates, and which actions should be prioritized first.",
+        "A concise view of workforce risk, structure, and immediate HR priorities.",
     )
 
     risk_counts = _risk_counts(df)
@@ -220,3 +202,6 @@ def render_dashboard_page(df: pd.DataFrame, schema: dict[str, str | None], datas
                 info_card(action, f"Currently suggested as the leading action for {count} employee cases.")
         else:
             empty_state("No action summary yet", "Action recommendations are not available for the current data.")
+
+    st.markdown("<div class='tg-hr'></div>", unsafe_allow_html=True)
+    footer_note("Decision-support only. This interface supports HR review and should not be used as an automated decision-maker.")

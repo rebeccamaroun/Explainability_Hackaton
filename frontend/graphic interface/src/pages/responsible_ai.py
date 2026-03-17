@@ -13,11 +13,7 @@ def render_responsible_ai_page(df, schema: dict[str, str | None], dataset, ai_co
     llm_ok, llm_message = OllamaService().health_check()
     page_header(
         "Responsible AI and Transparency",
-        "A readable view of the real predictive model integration, explainability source, local LLM role, and safeguards expected around sensitive HR data.",
-        eyebrow="Trust and governance",
-        badges=[("Responsible use", "demo"), ("Human review required", "warn")],
-        aside_title="What this page answers",
-        aside_body="What the tool does, what it does not do, and why the output should remain auditable and review-based.",
+        "Model boundaries, explainability source, and governance essentials.",
     )
 
     overview_left, overview_right = st.columns(2)
@@ -49,10 +45,7 @@ def render_responsible_ai_page(df, schema: dict[str, str | None], dataset, ai_co
         )
 
     st.markdown("<div class='tg-hr'></div>", unsafe_allow_html=True)
-    section_header(
-        "Sensitive data and audit perspective",
-        "Sensitive fields may exist in the dataset, but they should be treated as governance signals, not direct decision levers.",
-    )
+    section_header("Sensitive data and audit perspective")
     sensitive_present = [column for column in SENSITIVE_COLUMNS if column in df.columns]
 
     if sensitive_present:
@@ -71,10 +64,7 @@ def render_responsible_ai_page(df, schema: dict[str, str | None], dataset, ai_co
 
     principles_col, status_col = st.columns(2)
     with principles_col:
-        section_header(
-            "Responsible use statements",
-            "These principles should remain visible in any demo, review meeting, or future production rollout.",
-        )
+        section_header("Responsible use statements")
         bullet_card(
             "Core statements",
             [
@@ -88,31 +78,19 @@ def render_responsible_ai_page(df, schema: dict[str, str | None], dataset, ai_co
         )
 
     with status_col:
-        section_header("Integration status", "Current pipeline state and what it means for trust in the displayed outputs.")
-        if ai_context["mode"] in {"real", "hybrid"}:
-            component_lines = ai_context.get("components", {})
-            notice(
-                "External AI outputs detected",
-                (
-                    f"The application detected the following external files: {', '.join(ai_context['available_files']) or 'metadata only'}. "
-                    f"Current component status - risk scores: {component_lines.get('risk_scores', 'unknown')}, "
-                    f"explanations: {component_lines.get('explanations', 'unknown')}, "
-                    f"recommendations: {component_lines.get('recommendations', 'unknown')}."
-                ),
-                tone="info",
-            )
-        else:
-            notice(
-                "Fallback demo logic active",
-                "No exported model artifacts were detected. Risk, explanations, and recommendations currently rely on transparent fallback logic.",
-                tone="warning",
-            )
+        section_header("System details")
         info_card(
             "Data protection reminder",
             "Only the minimum necessary data should be exposed in business workflows, and access should stay aligned with HR governance rules.",
         )
-        notice(
-            "Local Ollama status",
-            llm_message if llm_ok else f"LLM-assisted sections will stay disabled. {llm_message}",
-            tone="info" if llm_ok else "warning",
-        )
+        with st.expander("View integration and LLM status", expanded=False):
+            if ai_context["mode"] in {"real", "hybrid"}:
+                component_lines = ai_context.get("components", {})
+                st.caption(f"Files detected: {', '.join(ai_context['available_files']) or 'none'}")
+                st.caption(f"Risk scores: {component_lines.get('risk_scores', 'unknown')}")
+                st.caption(f"Explanations: {component_lines.get('explanations', 'unknown')}")
+                st.caption(f"Recommendations: {component_lines.get('recommendations', 'unknown')}")
+            else:
+                st.caption("Fallback logic is active for the current run.")
+            st.caption(f"Notebook source: {model_metadata.get('notebook_path') or 'Not found'}")
+            st.caption(llm_message if llm_ok else f"LLM-assisted sections will stay disabled. {llm_message}")

@@ -78,7 +78,7 @@ class OllamaService:
             f"Evidence: {json.dumps(compact_payload, ensure_ascii=True)}"
         )
 
-    def generate_employee_brief(self, payload: dict) -> dict:
+    def generate_employee_brief(self, payload: dict, timeout_seconds: int | None = None) -> dict:
         ok, message = self.health_check()
         if not ok:
             return {"available": False, "error": message, "diagnostics": {"health_check": message}}
@@ -108,7 +108,7 @@ class OllamaService:
 
         started_at = time.perf_counter()
         try:
-            with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
+            with urllib.request.urlopen(request, timeout=timeout_seconds or self.config.timeout_seconds) as response:
                 raw_response = json.loads(response.read().decode("utf-8"))
         except urllib.error.URLError as exc:
             return {"available": False, "error": f"Local LLM service timeout or network error: {exc.reason}", "diagnostics": {"latency_seconds": round(time.perf_counter() - started_at, 3)}}
@@ -150,9 +150,10 @@ def cached_generate_employee_brief(
     explanation_version: str,
     llm_model_name: str,
     payload_json: str,
+    timeout_seconds: int | None = None,
 ) -> dict:
     service = OllamaService(OllamaConfig(model=llm_model_name))
-    result = service.generate_employee_brief(json.loads(payload_json))
+    result = service.generate_employee_brief(json.loads(payload_json), timeout_seconds=timeout_seconds)
     if result.get("diagnostics"):
         result["diagnostics"]["cache_hit"] = False
     return result
@@ -164,6 +165,7 @@ def generate_employee_brief_with_cache(
     explanation_version: str,
     llm_model_name: str,
     payload_json: str,
+    timeout_seconds: int | None = None,
 ) -> dict:
     before = cached_generate_employee_brief.cache_info()
     result = cached_generate_employee_brief(
@@ -172,6 +174,7 @@ def generate_employee_brief_with_cache(
         explanation_version,
         llm_model_name,
         payload_json,
+        timeout_seconds,
     )
     after = cached_generate_employee_brief.cache_info()
     response = dict(result)

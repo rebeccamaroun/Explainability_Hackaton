@@ -357,74 +357,44 @@ def use_app_styles() -> None:
 
 def page_header(
     title: str,
-    description: str,
+    description: str | None = None,
     eyebrow: str | None = None,
     badges: list[tuple[str, str]] | None = None,
     aside_title: str | None = None,
     aside_body: str | None = None,
 ) -> None:
-    badge_html = ""
-    if badges:
-        badge_html = "".join(f'<span class="tg-badge {tone}">{label}</span>' for label, tone in badges)
+    with st.container():
+        if eyebrow:
+            st.markdown(f'<div class="tg-overline">{eyebrow}</div>', unsafe_allow_html=True)
 
-    aside_html = ""
-    if aside_title and aside_body:
-        aside_html = f"""
-        <div class="tg-mini-panel">
-            <div class="tg-mini-label">{aside_title}</div>
-            <div class="tg-mini-value">{aside_body}</div>
-        </div>
-        """
+        main_col, aside_col = st.columns([1.8, 1])
+        with main_col:
+            if badges:
+                badge_html = "".join(f'<span class="tg-badge {tone}">{label}</span>' for label, tone in badges)
+                st.markdown(badge_html, unsafe_allow_html=True)
+            st.subheader(title)
+            if description:
+                st.caption(description)
 
-    st.markdown(
-        f"""
-        <div class="tg-page-header">
-            {f'<div class="tg-overline">{eyebrow}</div>' if eyebrow else ''}
-            <div class="tg-hero-grid">
-                <div>
-                    {badge_html}
-                    <h2>{title}</h2>
-                    <p class="tg-page-copy">{description}</p>
-                </div>
-                <div>{aside_html}</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        with aside_col:
+            if aside_title and aside_body:
+                st.markdown(
+                    f"""
+                    <div class="tg-mini-panel">
+                        <div class="tg-mini-label">{aside_title}</div>
+                        <div class="tg-mini-value">{aside_body}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
 
 def render_app_header(ai_context: dict, dataset) -> None:
-    badge_class = "demo" if ai_context["mode"] == "demo" else "warn"
-    source_label = "Mock dataset" if dataset.is_mock else "Live HR dataset"
-    source_body = (
-        "Fallback records are shown because the main CSV was not found."
-        if dataset.is_mock
-        else "Structured HR records are loaded and ready for review."
-    )
-    if ai_context["mode"] == "real":
-        integration_copy = "Real model artifacts are connected for predictions and explainability."
-    elif ai_context["mode"] == "hybrid":
-        integration_copy = "Real model artifacts are connected where available, with narrow fallbacks only for missing layers."
-    else:
-        integration_copy = "Trained-model artifacts were not detected, so the app is using transparent fallback logic."
     st.markdown(
         f"""
         <div class="tg-hero">
-            <div class="tg-overline">HR Retention Decision Support</div>
-            <div class="tg-hero-grid">
-                <div>
-                    <span class="tg-badge {badge_class}">{ai_context['label']}</span>
-                    <span class="tg-badge demo">{source_label}</span>
-                    <h1>{APP_NAME}</h1>
-                    <p class="tg-hero-copy">{APP_TAGLINE}. Review workforce signals, understand risk drivers, and prepare calibrated HR follow-up without automating decisions.</p>
-                </div>
-                <div class="tg-mini-panel">
-                    <div class="tg-mini-label">Current context</div>
-                    <div class="tg-mini-value">{source_body}</div>
-                    <p class="tg-page-copy" style="margin-top:0.45rem;">{integration_copy}</p>
-                </div>
-            </div>
+            <h1>{APP_NAME}</h1>
+            <p class="tg-hero-copy">{APP_TAGLINE}</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -446,26 +416,14 @@ def render_global_messages(dataset, ai_context: dict) -> None:
             "when they rely on demo logic."
         )
 
-    left, right = st.columns([1.35, 1])
-    with left:
-        notice(
-            "Data and AI status",
-            status_text,
-            tone="info",
-        )
-    with right:
-        notice(
-            "Decision-support boundary",
-            "This interface informs HR review. It must not be used as an automated decision-maker.",
-            tone="warning",
-        )
-
-    if dataset.is_mock:
-        notice("Dataset not found", dataset.message, tone="alert")
-    elif ai_context["mode"] == "demo":
-        st.caption("Heuristic indicators are currently displayed because no trained-model outputs were detected.")
-    elif ai_context["mode"] == "hybrid":
-        st.caption("The application is using trained model outputs where available and heuristic guidance for the remaining layers.")
+    with st.expander("View system status", expanded=False):
+        st.caption(status_text)
+        if dataset.is_mock:
+            st.caption(dataset.message)
+        elif ai_context["mode"] == "demo":
+            st.caption("Fallback heuristic logic is currently active for missing model layers.")
+        elif ai_context["mode"] == "hybrid":
+            st.caption("Real model outputs are active with limited fallbacks on remaining layers.")
 
 
 def section_header(title: str, description: str | None = None) -> None:
@@ -601,3 +559,7 @@ def safe_download_dataframe(df: pd.DataFrame, label: str, filename: str) -> None
         mime="text/csv",
         use_container_width=False,
     )
+
+
+def footer_note(text: str) -> None:
+    st.caption(text)

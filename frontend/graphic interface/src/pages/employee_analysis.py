@@ -14,7 +14,6 @@ from src.ui_components import (
     contribution_chart,
     empty_state,
     info_card,
-    notice,
     page_header,
     render_risk_badge,
     section_header,
@@ -80,20 +79,7 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
     model_metadata = build_model_metadata()
     page_header(
         "Employee Analysis",
-        "A decision-support profile for one employee, combining structured context, estimated risk, transparent drivers, and recommended next steps.",
-        eyebrow="Individual Review",
-        badges=[
-            (
-                "Heuristic outputs only"
-                if ai_context["mode"] == "demo"
-                else "Hybrid AI outputs"
-                if ai_context["mode"] == "hybrid"
-                else "Integrated AI outputs",
-                "demo" if ai_context["mode"] == "demo" else "warn",
-            )
-        ],
-        aside_title="What this page answers",
-        aside_body="Who may need HR attention now, why the signal appears, and which action should come first.",
+        "Employee profile, risk evidence, and follow-up options.",
     )
 
     labels = [_employee_label(row, schema) for _, row in df.iterrows()]
@@ -117,7 +103,7 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
     summary_tab, drivers_tab, actions_tab = st.tabs(["Profile", "Drivers", "Actions"])
 
     with summary_tab:
-        section_header("Employee summary", "A compact business view of the employee context used for this review.")
+        section_header("Employee summary")
         summary_fields = _summary_fields(row, schema, tenure_years)
         summary_cols = st.columns(4)
         for index, (label, value) in enumerate(summary_fields):
@@ -125,33 +111,36 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
 
         lead_col, summary_col = st.columns([0.88, 1.12])
         with lead_col:
-            section_header("Risk posture", "This score remains an aid for discussion, not an automated judgment.")
+            section_header("Risk posture")
             render_risk_badge(row.get("risk_level", "Unknown"), row.get("risk_score"))
-            components = ai_context.get("components", {})
-            if components.get("risk_scores") == "real":
-                st.caption("Risk score loaded from the trained model export.")
-            if bool(row.get("summary_is_simulated", ai_context["mode"] == "demo")):
-                st.caption("Narrative summary and some HR guidance may still rely on heuristic logic.")
-            notice(
-                "Decision-support notice",
-                "This output should be reviewed alongside manager context, recent events, and HR judgment before any intervention.",
-                tone="warning",
-            )
+            with st.expander("View status details", expanded=False):
+                components = ai_context.get("components", {})
+                st.caption(f"Risk scores: {components.get('risk_scores', 'unknown')}")
+                st.caption(f"Explanations: {components.get('explanations', 'unknown')}")
+                st.caption(f"Recommendations: {components.get('recommendations', 'unknown')}")
+                if bool(row.get("summary_is_simulated", ai_context["mode"] == "demo")):
+                    st.caption("Narrative summary and some HR guidance may still rely on heuristic logic.")
+            st.caption("Use this output to support review, not to automate a decision.")
 
         with summary_col:
-            section_header("HR summary", "A readable synthesis designed for HR case review.")
+            section_header("HR summary")
             st.write(row.get("hr_summary", "No HR summary is available for this employee."))
-            st.caption("AI-assisted HR wording is optional and generated only on request.")
+            st.caption("Optional local AI wording is available on request.")
+            summary_placeholder = st.empty()
             if st.button("Generate AI HR Summary", key=llm_button_key, use_container_width=False):
-                with st.spinner("Generating local AI summary..."):
-                    llm_result = generate_employee_brief_with_cache(
-                        employee_identifier,
-                        model_metadata.get("model_version", "unknown"),
-                        model_metadata.get("explanation_version", "unknown"),
-                        OLLAMA_MODEL,
-                        json.dumps(llm_payload, sort_keys=True, default=str),
-                    )
-                    st.session_state[llm_state_key] = llm_result
+                with summary_placeholder.container():
+                    notice("Generating AI summary...", "Please wait while the local model prepares the summary.", tone="info")
+                    with st.spinner("Generating AI summary..."):
+                        llm_result = generate_employee_brief_with_cache(
+                            employee_identifier,
+                            model_metadata.get("model_version", "unknown"),
+                            model_metadata.get("explanation_version", "unknown"),
+                            OLLAMA_MODEL,
+                            json.dumps(llm_payload, sort_keys=True, default=str),
+                            timeout_seconds=45,
+                        )
+                        st.session_state[llm_state_key] = llm_result
+                summary_placeholder.empty()
 
             llm_result = st.session_state.get(llm_state_key)
             if llm_result and llm_result.get("available"):
@@ -159,14 +148,15 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
                 info_card("AI-assisted HR summary", llm_result.get("summary") or "No LLM summary returned.")
                 diagnostics = llm_result.get("diagnostics", {})
                 if diagnostics:
-                    st.caption(
-                        f"LLM latency: {diagnostics.get('latency_seconds', 'n/a')}s | "
-                        f"load: {diagnostics.get('load_duration_ms', 'n/a')} ms | "
-                        f"eval: {diagnostics.get('eval_duration_ms', 'n/a')} ms | "
-                        f"cache hit: {diagnostics.get('cache_hit', False)}"
-                    )
+                    with st.expander("View AI generation diagnostics", expanded=False):
+                        st.caption(
+                            f"LLM latency: {diagnostics.get('latency_seconds', 'n/a')}s | "
+                            f"load: {diagnostics.get('load_duration_ms', 'n/a')} ms | "
+                            f"eval: {diagnostics.get('eval_duration_ms', 'n/a')} ms | "
+                            f"cache hit: {diagnostics.get('cache_hit', False)}"
+                        )
             elif llm_result and not llm_result.get("available"):
-                notice("AI summary unavailable right now", llm_result.get("error", "Local Ollama service not reachable."), tone="info")
+                info_card("AI summary unavailable right now", llm_result.get("error", "Local Ollama service not reachable."))
 
     with drivers_tab:
         driver_col, factor_col = st.columns([1.2, 0.9])
@@ -175,16 +165,14 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
             explanations = []
 
         with driver_col:
-            section_header("Why this risk level?", "Contribution-style view of the main signals used in the current estimate.")
+            section_header("Why this risk level?")
             if explanations:
-                if ai_context.get("components", {}).get("explanations") == "real":
-                    st.caption("Explanation factors loaded from exported SHAP results.")
                 st.plotly_chart(contribution_chart(explanations), use_container_width=True)
             else:
                 empty_state("No explanation details available", "No structured explanation was found for this employee.")
 
         with factor_col:
-            section_header("Main risk factors", "The strongest signals that currently influence the employee profile.")
+            section_header("Main risk factors")
             if explanations:
                 bullet_card(
                     "Detected signals",
@@ -199,7 +187,7 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
 
         left, right = st.columns([1.05, 0.95])
         with left:
-            section_header("Recommended preventive actions", "Suggested next steps linked to the current detected factors.")
+            section_header("Recommended preventive actions")
             if actions:
                 for index, action in enumerate(actions[:4]):
                     linked_factor = factors[index]["factor"] if index < len(factors) else "general review"
@@ -213,7 +201,7 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
                     info_card(action, "Generated locally by Ollama from deterministic model evidence.")
 
         with right:
-            section_header("How to use this output", "Keep the employee discussion grounded, proportional, and review-based.")
+            section_header("How to use this output")
             bullet_card(
                 "Good practice reminders",
                 [

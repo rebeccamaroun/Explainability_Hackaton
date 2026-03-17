@@ -9,13 +9,13 @@ def integrate_model_outputs(df):
     components = result.components
     if all(status == "real" for status in components.values()):
         mode = "real"
-        label = "Real model outputs integrated"
+        label = "Model-backed"
     elif any(status == "real" for status in components.values()):
         mode = "hybrid"
-        label = "Real model outputs integrated with targeted fallbacks"
+        label = "Hybrid model state"
     else:
         mode = "demo"
-        label = "Fallback heuristic outputs only"
+        label = "Fallback mode"
 
     ai_context = {
         "mode": mode,

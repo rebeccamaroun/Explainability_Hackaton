@@ -16,20 +16,7 @@ def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dat
     model_metadata = build_model_metadata()
     page_header(
         "Action Plan",
-        "Prioritize HR follow-up by filtering the highest-risk cases, reviewing key factors, and exporting a practical action list for next steps.",
-        eyebrow="Prioritization",
-        badges=[
-            (
-                "Heuristic priorities"
-                if ai_context["mode"] == "demo"
-                else "Hybrid priorities"
-                if ai_context["mode"] == "hybrid"
-                else "AI-enriched priorities",
-                "demo" if ai_context["mode"] == "demo" else "warn",
-            )
-        ],
-        aside_title="What this page answers",
-        aside_body="Which employees should be reviewed first, what is driving urgency, and which action should start the follow-up.",
+        "Prioritized employee review and exportable follow-up list.",
     )
 
     work_df = df.copy()
@@ -58,7 +45,7 @@ def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dat
     if "priority_status" not in work_df.columns:
         work_df["priority_status"] = "To launch"
 
-    section_header("Priority queue", "A review table focused on actionability rather than technical detail.")
+    section_header("Priority queue")
 
     display = pd.DataFrame(
         {
@@ -101,18 +88,15 @@ def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dat
 
     lower = st.columns([1.15, 0.85])
     with lower[0]:
-        notice(
-            "Operational guidance",
-            "Start with high-risk cases, validate the signal with context, and document the first preventive action in a structured follow-up process.",
-            tone="info",
-        )
+        with st.expander("View workflow notes", expanded=False):
+            st.caption("Start with high-risk cases, validate the signal with context, and document the first preventive action.")
     with lower[1]:
         safe_download_dataframe(display, "Export current action plan", "talentguard_action_plan.csv")
         st.caption("The export follows the active filters and sorting choices.")
 
     if not display.empty:
         st.markdown("<div class='tg-hr'></div>", unsafe_allow_html=True)
-        section_header("AI-assisted action rationale", "Generate an optional short rationale for one selected employee only.")
+        section_header("AI-assisted action rationale")
         candidate_rows = display.head(max_rows).copy()
         labels = [f"{row.Employee} | {row.Department} | {row['Risk level']}" for _, row in candidate_rows.iterrows()]
         selected_label = st.selectbox("Select an employee for AI details", labels, key="action_plan_llm_employee")
@@ -130,7 +114,7 @@ def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dat
             "allowed_actions": [selected_row["Priority action"]],
             "text_insight": "",
         }
-        st.caption("This optional step does not affect the table load. It uses the local LLM only after user request.")
+        st.caption("Optional local AI rationale for the selected employee.")
         if st.button("Generate AI Action Rationale", key="action_plan_llm_generate"):
             with st.spinner("Generating local AI rationale..."):
                 llm_result = generate_employee_brief_with_cache(
@@ -139,6 +123,7 @@ def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dat
                     model_metadata.get("explanation_version", "unknown"),
                     OLLAMA_MODEL,
                     json.dumps(payload, sort_keys=True, default=str),
+                    timeout_seconds=30,
                 )
                 st.session_state[llm_state_key] = llm_result
 
@@ -154,11 +139,12 @@ def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dat
                     notice("AI-assisted action phrasing", action, tone="info")
             diagnostics = llm_result.get("diagnostics", {})
             if diagnostics:
-                st.caption(
-                    f"LLM latency: {diagnostics.get('latency_seconds', 'n/a')}s | "
-                    f"load: {diagnostics.get('load_duration_ms', 'n/a')} ms | "
-                    f"eval: {diagnostics.get('eval_duration_ms', 'n/a')} ms | "
-                    f"cache hit: {diagnostics.get('cache_hit', False)}"
-                )
+                with st.expander("View AI generation diagnostics", expanded=False):
+                    st.caption(
+                        f"LLM latency: {diagnostics.get('latency_seconds', 'n/a')}s | "
+                        f"load: {diagnostics.get('load_duration_ms', 'n/a')} ms | "
+                        f"eval: {diagnostics.get('eval_duration_ms', 'n/a')} ms | "
+                        f"cache hit: {diagnostics.get('cache_hit', False)}"
+                    )
         elif llm_result and not llm_result.get("available"):
             notice("AI rationale unavailable right now", llm_result.get("error", "Local LLM service timeout."), tone="warning")
