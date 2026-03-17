@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 import pandas as pd
 import streamlit as st
 
-from src.config import DATASET_CANDIDATES
+from src.config import APP_MANAGED_DATASET, DATASET_CANDIDATES
 
 
 @dataclass
@@ -14,6 +15,7 @@ class DatasetBundle:
     source_path: str | None
     is_mock: bool
     message: str
+    is_managed_copy: bool = False
 
 
 def _clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -22,7 +24,7 @@ def _clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     object_columns = cleaned.select_dtypes(include="object").columns
     for column in object_columns:
         cleaned[column] = cleaned[column].astype(str).str.strip()
-        cleaned.loc[cleaned[column].isin(["", "nan", "None"]), column] = pd.NA
+        cleaned.loc[cleaned[column].isin(["", "nan", "None", "NaT"]), column] = pd.NA
     return cleaned
 
 
@@ -69,42 +71,33 @@ def _build_mock_dataset() -> pd.DataFrame:
                 "Sex": "M",
                 "RaceDesc": "Undisclosed",
             },
-            {
-                "Employee_Name": "Samira Patel",
-                "EmpID": 9003,
-                "Department": "Sales",
-                "Position": "Account Executive",
-                "Salary": 69000,
-                "Termd": 1,
-                "EmploymentStatus": "Voluntarily Terminated",
-                "PerformanceScore": "Needs Improvement",
-                "EngagementSurvey": 2.8,
-                "EmpSatisfaction": 2,
-                "SpecialProjectsCount": 0,
-                "DaysLateLast30": 4,
-                "Absences": 11,
-                "DateofHire": "2023-01-12",
-                "DateofTermination": "2025-12-08",
-                "TermReason": "career change",
-                "DOB": "1995-07-04",
-                "ManagerName": "Maria Keller",
-                "Sex": "F",
-                "RaceDesc": "Undisclosed",
-            },
         ]
     )
 
 
+def _load_csv(path) -> pd.DataFrame:
+    return _clean_dataframe(pd.read_csv(path))
+
+
 @st.cache_data(show_spinner=False)
 def load_hr_dataset() -> DatasetBundle:
+    if APP_MANAGED_DATASET.exists():
+        return DatasetBundle(
+            df=_load_csv(APP_MANAGED_DATASET),
+            source_path=str(APP_MANAGED_DATASET),
+            is_mock=False,
+            message="Managed HR dataset loaded successfully.",
+            is_managed_copy=True,
+        )
+
     for candidate in DATASET_CANDIDATES:
         if candidate.exists():
-            df = pd.read_csv(candidate)
             return DatasetBundle(
-                df=_clean_dataframe(df),
+                df=_load_csv(candidate),
                 source_path=str(candidate),
                 is_mock=False,
                 message="Real HR dataset loaded successfully.",
+                is_managed_copy=False,
             )
 
     return DatasetBundle(
@@ -112,7 +105,92 @@ def load_hr_dataset() -> DatasetBundle:
         source_path=None,
         is_mock=True,
         message=(
-            "HRDataset_v14.csv was not found. The app is running with a small internal mock dataset. "
-            "Place the CSV in graphic interface/data/ or next to the project to use the real dataset."
+            "No HR dataset was found. The app is running with a small internal mock dataset. "
+            "Add a real file or create a managed copy from the Add Employee page."
         ),
+        is_managed_copy=False,
     )
+
+
+def _safe_unique_emp_id(df: pd.DataFrame) -> int:
+    if "EmpID" not in df.columns:
+        return 100001
+    numeric_ids = pd.to_numeric(df["EmpID"], errors="coerce").dropna()
+    if numeric_ids.empty:
+        return 100001
+    return int(numeric_ids.max()) + 1
+
+
+def _default_for_column(df: pd.DataFrame, column: str):
+    defaults = {
+        "Termd": 0,
+        "EmploymentStatus": "Active",
+        "DateofTermination": pd.NA,
+        "TermReason": pd.NA,
+        "Absences": 0,
+        "DaysLateLast30": 0,
+        "SpecialProjectsCount": 0,
+        "FromDiversityJobFairID": 0,
+        "EngagementSurvey": 3.0,
+        "EmpSatisfaction": 3,
+        "PerformanceScore": "Fully Meets",
+        "PerfScoreID": 3,
+        "Internal_Transfer_Request": "No request made",
+        "Avg_Overtime_Hours": 0.0,
+        "Distance_From_Home_Km": 0.0,
+        "Remote_Work_Frequency": 0,
+        "Exit_Interview_Feedback": pd.NA,
+    }
+    if column in defaults:
+        return defaults[column]
+
+    if column in df.columns:
+        series = df[column].dropna()
+        if not series.empty:
+            return series.mode().iloc[0] if not series.mode().empty else series.iloc[0]
+    return pd.NA
+
+
+def _normalize_value_for_storage(column: str, value):
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+def append_employee_record(employee_data: dict) -> tuple[bool, str, dict | None]:
+    try:
+        dataset = load_hr_dataset()
+        base_df = dataset.df.copy()
+        if base_df.empty:
+            base_df = _build_mock_dataset()
+
+        new_row = {column: _default_for_column(base_df, column) for column in base_df.columns}
+        for column, value in employee_data.items():
+            if column in new_row:
+                new_row[column] = _normalize_value_for_storage(column, value)
+
+        if "EmpID" in new_row:
+            proposed_id = pd.to_numeric(pd.Series([new_row["EmpID"]]), errors="coerce").iloc[0]
+            if pd.isna(proposed_id) or int(proposed_id) <= 0:
+                new_row["EmpID"] = _safe_unique_emp_id(base_df)
+            else:
+                existing_ids = set(pd.to_numeric(base_df["EmpID"], errors="coerce").dropna().astype(int).tolist()) if "EmpID" in base_df.columns else set()
+                if int(proposed_id) in existing_ids:
+                    return False, "Employee ID already exists.", None
+                new_row["EmpID"] = int(proposed_id)
+
+        if not str(new_row.get("Employee_Name", "")).strip():
+            return False, "Employee name is required.", None
+
+        for column in base_df.columns:
+            if column not in new_row:
+                new_row[column] = _default_for_column(base_df, column)
+
+        updated_df = pd.concat([base_df, pd.DataFrame([new_row], columns=base_df.columns)], ignore_index=True)
+        updated_df = _clean_dataframe(updated_df)
+        APP_MANAGED_DATASET.parent.mkdir(parents=True, exist_ok=True)
+        updated_df.to_csv(APP_MANAGED_DATASET, index=False)
+        load_hr_dataset.clear()
+        return True, "Employee added successfully.", new_row
+    except Exception as exc:  # pragma: no cover
+        return False, f"Failed to persist the employee record: {exc}", None

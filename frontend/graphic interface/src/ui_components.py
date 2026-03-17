@@ -349,6 +349,20 @@ def use_app_styles() -> None:
         .stButton button {
             border-radius: 999px;
         }
+
+        .stButton button[kind="primary"] {
+            background: #143a5c;
+            color: #ffffff;
+            border: 1px solid #143a5c;
+            font-weight: 700;
+        }
+
+        [data-testid="stSidebar"] .stButton button {
+            background: rgba(255, 255, 255, 0.14);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            font-weight: 700;
+        }
         </style>
         """,
         unsafe_allow_html=True,

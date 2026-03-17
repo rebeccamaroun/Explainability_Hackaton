@@ -7,6 +7,7 @@ APP_TAGLINE = "Explainable employee retention monitoring for HR teams"
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 ASSETS_DIR = BASE_DIR / "assets"
+APP_MANAGED_DATASET = DATA_DIR / "app_managed_hr_dataset.csv"
 
 
 def _unique_paths(paths: list[Path]) -> list[Path]:

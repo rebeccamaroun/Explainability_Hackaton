@@ -83,8 +83,27 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
     )
 
     labels = [_employee_label(row, schema) for _, row in df.iterrows()]
-    selected_label = st.selectbox("Select an employee", labels)
+
+    default_index = 0
+    target_emp_id = st.session_state.get("talentguard_new_employee_id")
+    target_emp_name = st.session_state.get("talentguard_new_employee_name")
+    if target_emp_id is not None and schema.get("employee_id") in df.columns:
+        matches = df.index[pd.to_numeric(df[schema["employee_id"]], errors="coerce") == pd.to_numeric(pd.Series([target_emp_id]), errors="coerce").iloc[0]].tolist()
+        if matches:
+            default_index = int(df.index.get_loc(matches[0]))
+    elif target_emp_name is not None and schema.get("employee_name") in df.columns:
+        matches = df.index[df[schema["employee_name"]].astype(str) == str(target_emp_name)].tolist()
+        if matches:
+            default_index = int(df.index.get_loc(matches[0]))
+
+    if labels:
+        if target_emp_id is not None or target_emp_name is not None:
+            st.session_state["talentguard_employee_selector"] = labels[default_index]
+
+    selected_label = st.selectbox("Select an employee", labels, index=default_index, key="talentguard_employee_selector")
     selected_index = labels.index(selected_label)
+    st.session_state.pop("talentguard_new_employee_id", None)
+    st.session_state.pop("talentguard_new_employee_name", None)
     row = df.iloc[selected_index]
     tenure_years = derive_tenure_years(df, schema)
     initial_actions = row.get("recommended_actions", [])
