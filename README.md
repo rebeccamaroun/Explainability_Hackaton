@@ -2,6 +2,8 @@
 
 **Themes:** Frugal AI + Explainable AI
 
+**Demo video:** https://www.canva.com/design/DAHEN4lni1A/Vw6I44M3I4PzPV9PBadmsA/watch?utm_content=DAHEN4lni1A&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h1f79de2b36
+
 ## Context
 
 A fictional company faces high employee turnover (33.4%) and wants an AI-powered solution to help HR understand why people leave and take preventive action. We build a prediction model that is both **lightweight (frugal)** and **transparent (explainable)**.
