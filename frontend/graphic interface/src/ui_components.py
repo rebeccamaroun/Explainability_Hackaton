@@ -307,6 +307,40 @@ def use_app_styles() -> None:
             box-shadow: 0 8px 18px rgba(16, 35, 58, 0.04);
         }
 
+        .tg-field-card {
+            background: rgba(255,255,255,0.95);
+            border: 1px solid rgba(221, 228, 236, 0.92);
+            border-radius: 16px;
+            padding: 0.9rem 1rem;
+            box-shadow: 0 8px 18px rgba(16, 35, 58, 0.04);
+            min-height: 92px;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .tg-field-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 22px rgba(16, 35, 58, 0.07);
+        }
+
+        .tg-field-label {
+            color: var(--tg-muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 700;
+            margin-bottom: 0.45rem;
+        }
+
+        .tg-field-value {
+            color: var(--tg-text);
+            font-size: 1rem;
+            line-height: 1.35;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         [data-testid="stDataFrame"] {
             border: 1px solid rgba(221, 228, 236, 0.95);
             border-radius: 18px;
@@ -457,6 +491,19 @@ def metric_card(label: str, value: str, help_text: str | None = None) -> None:
             <div class="tg-kpi-label">{label}</div>
             <div class="tg-kpi-value">{value}</div>
             <div class="tg-card-body">{help_text or ''}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def summary_field_card(label: str, value: str) -> None:
+    safe_value = str(value)
+    st.markdown(
+        f"""
+        <div class="tg-field-card" title="{safe_value}">
+            <div class="tg-field-label">{label}</div>
+            <div class="tg-field-value">{safe_value}</div>
         </div>
         """,
         unsafe_allow_html=True,

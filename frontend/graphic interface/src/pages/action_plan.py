@@ -10,6 +10,7 @@ from src.llm_service import generate_employee_brief_with_cache
 from src.model_artifacts import build_model_metadata
 from src.schema_utils import normalize_text_value
 from src.ui_components import empty_state, notice, page_header, safe_download_dataframe, section_header
+from src.pages.employee_analysis import _decode_display_value
 
 
 def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dataset, ai_context: dict) -> None:
@@ -24,14 +25,23 @@ def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dat
     dept_col = schema.get("department")
 
     filter_cols = st.columns([1.1, 0.9, 0.9, 0.9])
-    departments = ["All"] + sorted(work_df[dept_col].dropna().unique().tolist()) if dept_col else ["All"]
-    selected_department = filter_cols[0].selectbox("Department", departments)
+    if dept_col:
+        raw_departments = sorted(work_df[dept_col].dropna().unique().tolist())
+        display_departments = {str(raw): _decode_display_value(dept_col, raw) for raw in raw_departments}
+        filter_options = ["All"] + [display_departments[str(raw)] for raw in raw_departments]
+        reverse_department_lookup = {display_departments[str(raw)]: raw for raw in raw_departments}
+    else:
+        filter_options = ["All"]
+        reverse_department_lookup = {}
+
+    selected_department = filter_cols[0].selectbox("Department", filter_options)
     selected_risk = filter_cols[1].selectbox("Risk level", ["All"] + RISK_LEVEL_ORDER)
     sort_by = filter_cols[2].selectbox("Sort by", ["Risk score", "Employee", "Department"])
     max_rows = filter_cols[3].selectbox("Rows", [10, 25, 50, 100], index=1)
 
     if selected_department != "All" and dept_col:
-        work_df = work_df[work_df[dept_col] == selected_department]
+        selected_raw_department = reverse_department_lookup.get(selected_department, selected_department)
+        work_df = work_df[work_df[dept_col] == selected_raw_department]
     if selected_risk != "All" and "risk_level" in work_df.columns:
         work_df = work_df[work_df["risk_level"] == selected_risk]
 
@@ -50,7 +60,7 @@ def render_action_plan_page(df: pd.DataFrame, schema: dict[str, str | None], dat
     display = pd.DataFrame(
         {
             "Employee": work_df[employee_col].apply(normalize_text_value) if employee_col else ["Not available"] * len(work_df),
-            "Department": work_df[dept_col].apply(normalize_text_value) if dept_col else ["Not available"] * len(work_df),
+            "Department": work_df[dept_col].apply(lambda value: _decode_display_value(dept_col, value)) if dept_col else ["Not available"] * len(work_df),
             "Risk level": work_df["risk_level"] if "risk_level" in work_df.columns else ["Not available"] * len(work_df),
             "Risk score": work_df.get("risk_score", pd.Series([pd.NA] * len(work_df))),
             "Key factors": work_df["key_factors"] if "key_factors" in work_df.columns else ["Not available"] * len(work_df),

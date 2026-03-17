@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from src.config import OLLAMA_MODEL
+from src.config import EXPLAINABILITY_ROOTS
 from src.llm_service import generate_employee_brief_with_cache
 from src.model_artifacts import build_model_metadata
 from src.schema_utils import derive_tenure_years, normalize_text_value
@@ -14,10 +15,37 @@ from src.ui_components import (
     contribution_chart,
     empty_state,
     info_card,
+    notice,
     page_header,
     render_risk_badge,
     section_header,
+    summary_field_card,
 )
+
+
+@st.cache_data(show_spinner=False)
+def _load_encoding_mappings() -> dict:
+    for root in EXPLAINABILITY_ROOTS:
+        mapping_path = root / "data" / "cleaned" / "encoding_mappings.json"
+        if mapping_path.exists():
+            return json.loads(mapping_path.read_text(encoding="utf-8"))
+    return {}
+
+
+def _decode_display_value(column_name: str | None, value) -> str:
+    text_value = normalize_text_value(value)
+    if column_name is None or text_value == "Not available":
+        return text_value
+
+    mappings = _load_encoding_mappings()
+    if column_name not in mappings:
+        return text_value
+
+    normalized_input = text_value.strip()
+    for label, encoded in mappings[column_name].items():
+        if normalized_input == str(encoded).strip():
+            return str(label).strip()
+    return text_value
 
 
 def _employee_label(row: pd.Series, schema: dict[str, str | None]) -> str:
@@ -41,8 +69,14 @@ def _summary_fields(row: pd.Series, schema: dict[str, str | None], tenure_years:
 
     return [
         ("Identifier", normalize_text_value(row.get(schema.get("employee_id"))) if schema.get("employee_id") else "Not available"),
-        ("Department", normalize_text_value(row.get(schema.get("department"))) if schema.get("department") else "Not available"),
-        ("Position", normalize_text_value(row.get(schema.get("position"))) if schema.get("position") else "Not available"),
+        (
+            "Department",
+            _decode_display_value(schema.get("department"), row.get(schema.get("department"))) if schema.get("department") else "Not available",
+        ),
+        (
+            "Position",
+            _decode_display_value(schema.get("position"), row.get(schema.get("position"))) if schema.get("position") else "Not available",
+        ),
         ("Performance", normalize_text_value(row.get(schema.get("performance_score"))) if schema.get("performance_score") else "Not available"),
         ("Salary", salary_text),
         ("Manager", normalize_text_value(row.get(schema.get("manager"))) if schema.get("manager") else "Not available"),
@@ -126,7 +160,8 @@ def render_employee_analysis_page(df: pd.DataFrame, schema: dict[str, str | None
         summary_fields = _summary_fields(row, schema, tenure_years)
         summary_cols = st.columns(4)
         for index, (label, value) in enumerate(summary_fields):
-            summary_cols[index % 4].metric(label, value)
+            with summary_cols[index % 4]:
+                summary_field_card(label, value)
 
         lead_col, summary_col = st.columns([0.88, 1.12])
         with lead_col:
